@@ -51,13 +51,8 @@ export class ProductsService {
 
     const products =  await this.productRepository.find({
       take: limit,
-      skip: offset,
-      relations: {
-        images: true
-      }
+      skip: offset
     });
-
-
 
     return products.map(product => ({
       ...product,
