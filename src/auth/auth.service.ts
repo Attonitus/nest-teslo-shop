@@ -1,10 +1,12 @@
-import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { comparePassword, hashPassword } from 'src/adapters/bcrypt.adapter';
 import { LoginUserDto } from './dto/login-user.dto';
+import { JwtService } from '@nestjs/jwt';
+import { JwtPayload } from './interfaces/jwt-payload.interface';
 
 
 @Injectable()
@@ -12,7 +14,9 @@ export class AuthService {
 
   constructor(
     @InjectRepository(User)
-    private readonly userRepository: Repository<User>
+    private readonly userRepository: Repository<User>,
+
+    private jwtService: JwtService
   ){}
 
   async create(createUserDto: CreateUserDto) {
@@ -31,11 +35,10 @@ export class AuthService {
         password: hashedPassword
       });
 
-      delete savedUser.password;
-
-      return savedUser;
-
-      // TODO RETURN JWT
+      return {
+        id: savedUser.id,
+        token: this.getJwtToken({id: savedUser.id})
+      };
 
     } catch (error) {
       this.handleError(error);
@@ -47,20 +50,29 @@ export class AuthService {
 
     const user = await this.userRepository.findOne({
       where: { email },
-      select: { email: true, password: true }
+      select: { email: true, password: true, id: true }
     })
 
     if(!user){
-      throw new BadRequestException(`Incorrect email or password`);
+      throw new UnauthorizedException(`Incorrect email or password`);
     }
 
     const {password, ...restUser} = user;
     
     if(!comparePassword(passwordLogged, password)){
-      throw new BadRequestException(`Incorrect email or password`);
+      throw new UnauthorizedException(`Incorrect email or password`);
     }
 
-    return restUser;
+    return {
+      id: restUser.id,
+      token: this.getJwtToken({id: restUser.id})
+    };
+  }
+
+  private getJwtToken(payload: JwtPayload){
+
+    const token = this.jwtService.sign(payload);
+    return token;
   }
 
   private handleError(error: any){
